@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 
 const PORT = Number(process.env.TK_BROWSER_PORT || 4901);
+const BASE = process.env.TK_BASE || 'http://localhost:' + PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let failures = 0;
 const cdpErrors = [];
@@ -15,16 +16,19 @@ function assert(cond, msg) {
   }
 }
 
-const proc = spawn(process.execPath, ['server/index.js'], {
-  env: { ...process.env, PORT: String(PORT) },
-  stdio: ['ignore', 'pipe', 'pipe']
-});
-proc.stderr.on('data', d => console.error('[server] ' + d.toString().trim()));
+let proc = null;
+if (!process.env.TK_BASE) {
+  proc = spawn(process.execPath, ['server/index.js'], {
+    env: { ...process.env, PORT: String(PORT) },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  proc.stderr.on('data', d => console.error('[server] ' + d.toString().trim()));
+}
 
 async function waitServer() {
   for (let i = 0; i < 60; i++) {
     try {
-      const r = await fetch('http://localhost:' + PORT + '/health');
+      const r = await fetch(BASE + '/health');
       if (r.ok) return true;
     } catch {}
     await sleep(150);
@@ -35,7 +39,7 @@ async function waitServer() {
 const up = await waitServer();
 assert(up, 'servidor arriba para el navegador');
 if (!up) {
-  proc.kill();
+  if (proc) proc.kill();
   process.exit(1);
 }
 
@@ -52,7 +56,7 @@ page.on('console', m => {
 });
 page.on('pageerror', e => cdpErrors.push('pageerror: ' + e.message));
 
-await page.goto('http://localhost:' + PORT + '/', { waitUntil: 'networkidle2', timeout: 30000 });
+await page.goto(BASE + '/', { waitUntil: 'networkidle2', timeout: 45000 });
 await sleep(2500);
 assert(!!(await page.$('#menu')), 'menu principal presente');
 const menuVisible = await page.$eval('#menu', el => !el.classList.contains('hidden'));
@@ -65,23 +69,40 @@ const hasCanvasPixels = await page.evaluate(() => {
 assert(hasCanvasPixels, 'canvas de juego dimensionado');
 
 await page.click('#btnSolo');
-await sleep(5200);
+await sleep(1000);
+const raceReady = await (async () => {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 60000) {
+    const st = await page.evaluate(() => (window.__tk && window.__tk.race ? window.__tk.race.state : null));
+    if (st === 'racing') return true;
+    await sleep(500);
+  }
+  return false;
+})();
+assert(raceReady, 'carrera iniciada (estado racing)');
 const hudVisible = await page.$eval('#hud', el => !el.classList.contains('hidden'));
 assert(hudVisible, 'HUD visible tras iniciar carrera solo');
 const touchHidden = await page.$eval('#touch', el => el.classList.contains('hidden'));
 assert(touchHidden, 'controles tactiles ocultos en desktop');
 
 await page.keyboard.down('KeyW');
-await sleep(3500);
+const accelerated = await (async () => {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 25000) {
+    const v = Number(await page.$eval('#speedNum', el => el.textContent));
+    if (v > 25) return v;
+    await sleep(400);
+  }
+  return Number(await page.$eval('#speedNum', el => el.textContent));
+})();
+assert(accelerated > 25, 'el kart acelera y el velocimetro marca (' + accelerated + ' km/h)');
 await page.keyboard.down('Space');
 await page.keyboard.down('KeyA');
 await sleep(1500);
 await page.keyboard.up('KeyA');
 await page.keyboard.up('Space');
-await sleep(1500);
+await sleep(800);
 await page.keyboard.up('KeyW');
-const speedText = await page.$eval('#speedNum', el => el.textContent);
-assert(Number(speedText) > 20, 'el kart acelera y el velocimetro marca (' + speedText + ' km/h)');
 
 const posText = await page.$eval('#posNum', el => el.textContent);
 assert(posText !== '-', 'posicion en carrera calculada (' + posText + ')');
@@ -120,7 +141,7 @@ await sleep(200);
 await page.evaluate(() => document.getElementById('btnMenu')?.click());
 
 await browser.close();
-proc.kill();
+if (proc) proc.kill();
 if (failures) {
   console.error('\n' + failures + ' fallos');
   process.exit(1);
