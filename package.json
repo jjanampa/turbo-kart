@@ -1,0 +1,23 @@
+{
+  "name": "turbo-kart",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "PORT=4321 node server/index.js",
+    "check": "node --check server/index.js && node --check shared/constants.js && node --check shared/rng.js && node --check shared/track.js && node --check shared/physics.js && node --check shared/race.js && node --check shared/items.js && node --check shared/hazards.js && node --check shared/bots.js && node --check public/js/main.js && node --check public/js/game.js && node --check public/js/render.js && node --check public/js/kart.js && node --check public/js/hud.js && node --check public/js/ui.js && node --check public/js/input.js && node --check public/js/audio.js && node --check public/js/net.js && node --check public/js/local.js",
+    "sim": "node test/sim.js",
+    "wstest": "node test/ws.js",
+    "test": "node test/sim.js && node test/ws.js"
+  },
+  "dependencies": {
+    "compression": "^1.8.1",
+    "express": "^5.1.0",
+    "three": "^0.186.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.12.0"
+  }
+}

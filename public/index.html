@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Turbo Kart - Carreras en línea</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23e23b2e'/%3E%3Ccircle cx='20' cy='44' r='10' fill='%23161a20'/%3E%3Ccircle cx='44' cy='44' r='10' fill='%23161a20'/%3E%3Crect x='16' y='22' width='32' height='14' rx='5' fill='%23ffd166'/%3E%3C/svg%3E">
+<script type="importmap">
+{ "imports": { "three": "/vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="touch" class="hidden">
+  <div class="tpad tleft">
+    <button class="tbtn" data-k="left" aria-label="izquierda">&#9664;</button>
+    <button class="tbtn" data-k="right" aria-label="derecha">&#9654;</button>
+  </div>
+  <div class="tpad tright">
+    <button class="tbtn small" data-k="brake">Freno</button>
+    <button class="tbtn" data-k="item">Ítem</button>
+    <button class="tbtn wide" data-k="drift">Derrape</button>
+  </div>
+</div>
+
+<div id="hud" class="hidden">
+  <div id="posBox"><div id="posNum">-</div><div id="posOf">/8</div></div>
+  <div id="raceTop">
+    <div id="lapTxt">Vuelta 1/3</div>
+    <div id="timeTxt">0:00.00</div>
+  </div>
+  <div id="itemBox"><canvas id="itemCanvas" width="96" height="96"></canvas></div>
+  <div id="speedBox"><span id="speedNum">0</span><span class="unit">km/h</span></div>
+  <div id="netInfo"></div>
+  <canvas id="minimap" width="240" height="240"></canvas>
+  <div id="standings"></div>
+  <div id="bigMsg"></div>
+  <div id="wrongWay" class="hidden">SENTIDO CONTRARIO</div>
+  <div id="chatLog"></div>
+  <button id="btnHelp" title="Ayuda">?</button>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="panel menu-panel">
+    <h1>TURBO<span>KART</span></h1>
+    <p class="tag">Kart racing en línea para jugar con amigos</p>
+    <label class="field">Tu nombre
+      <input id="inpName" maxlength="16" value="Jugador" autocomplete="off">
+    </label>
+    <div class="chars" id="charGrid"></div>
+    <div class="stats" id="statBox"></div>
+    <div id="soloCfg"></div>
+    <div class="row">
+      <button id="btnSolo" class="big primary">Jugar solo</button>
+      <button id="btnCreate" class="big">Crear sala online</button>
+    </div>
+    <div class="row joinrow">
+      <input id="inpCode" maxlength="4" placeholder="CÓDIGO" autocomplete="off">
+      <button id="btnJoin">Unirse a sala</button>
+    </div>
+    <div class="hint" id="menuHint"></div>
+    <div class="controls">
+      <b>Controles:</b> W/&#8593; acelerar · S/&#8595; frenar · A/D/&#8592;/&#8594; girar · Espacio derrapar (¡suelta para turbo!) · E usar ítem · B mirar atrás · H claxon · M silenciar · 1-4 mensajes rápidos
+    </div>
+  </div>
+</div>
+
+<div id="lobby" class="overlay hidden">
+  <div class="panel wide-panel">
+    <h2 class="lobby-title">Sala <span id="roomCode" class="code">----</span>
+      <button id="btnCopy" class="mini">Copiar enlace de invitación</button>
+    </h2>
+    <div class="lobby-grid">
+      <div class="lobby-col">
+        <h3 id="playersTitle">Jugadores</h3>
+        <div class="players" id="lobbyPlayers"></div>
+      </div>
+      <div class="lobby-col" id="settingsCol">
+        <h3>Configuración</h3>
+        <div id="lobbySettings"></div>
+      </div>
+    </div>
+    <div class="hint" id="lobbyHint"></div>
+    <div class="row">
+      <button id="btnReady" class="primary">Estoy listo</button>
+      <button id="btnStart" class="primary host-only hidden">Iniciar carrera</button>
+      <button id="btnLeave">Salir</button>
+    </div>
+  </div>
+</div>
+
+<div id="results" class="overlay hidden">
+  <div class="panel">
+    <h2>Resultados</h2>
+    <table id="resTable"></table>
+    <div class="row">
+      <button id="btnAgain" class="primary host-only hidden">Otra vez</button>
+      <button id="btnToLobby" class="host-only hidden">Volver a la sala</button>
+      <button id="btnMenu">Menú principal</button>
+    </div>
+    <div class="hint" id="resHint"></div>
+  </div>
+</div>
+
+<div id="help" class="overlay hidden">
+  <div class="panel">
+    <h2>Cómo jugar</h2>
+    <ul class="helplist">
+      <li><b>Acelera</b> con W o la flecha arriba. Frena o da marcha atrás con S.</li>
+      <li><b>Derrape:</b> mantén Espacio mientras giras. Si sigues derrapando, las chispas pasan de azules a naranjas y luego violetas: al soltar obtienes un turbo mayor.</li>
+      <li><b>Ítems:</b> pasa por las cajas azules y pulsa E para usar: Turbo (acelerón), Plátano (trampa), Rayo (proyectil recto), Misil (persigue al de adelante) y Escudo (protege un golpe).</li>
+      <li><b>Turbo pads:</b> las flechas naranjas en la pista te dan un impulso gratis.</li>
+      <li><b>Salirse</b> de la pista te frena; los muros rebotan.</li>
+      <li><b>Online:</b> crea una sala y comparte el enlace, o pide el código de 4 letras. El anfitrión configura pista, vueltas y bots.</li>
+    </ul>
+    <div class="row"><button id="btnHelpClose" class="primary">Entendido</button></div>
+  </div>
+</div>
+
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>
