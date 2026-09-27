@@ -206,9 +206,6 @@ const hazardOk = await page.evaluate(() => {
 });
 assert(hazardOk, 'proyectiles con posiciones validas tras 1.5s');
 
-const errFiltered = cdpErrors.filter(e => !/favicon|AudioContext|Deprecat/i.test(e));
-assert(errFiltered.length === 0, 'sin errores de consola' + (errFiltered.length ? ': ' + errFiltered.slice(0, 3).join(' | ') : ''));
-
 await page.screenshot({ path: 'test/screenshot-race.png' });
 await page.click('#btnHelp');
 await sleep(300);
@@ -217,7 +214,27 @@ assert(helpVisible, 'ayuda se abre');
 await page.click('#btnHelpClose');
 await sleep(200);
 
-await page.evaluate(() => document.getElementById('btnMenu')?.click());
+const resOk = await page.evaluate(() => {
+  const app = window.__tk;
+  app.showResults([
+    { id: 'me', name: 'Yo', charId: 'turbo', place: 1, finished: true, time: 42310, bot: false },
+    { id: 'b1', name: 'Rex', charId: 'bolt', place: 2, finished: true, time: 45120, bot: true },
+    { id: 'b2', name: 'Luna', charId: 'mint', place: 3, finished: false, time: 0, bot: true }
+  ]);
+  const rows = document.querySelectorAll('#resTable tr').length;
+  const visible = !document.getElementById('results').classList.contains('hidden');
+  const meRow = [...document.querySelectorAll('#resTable tr')].some(tr => tr.className === 'me');
+  const hasDnf = document.getElementById('resTable').textContent.includes('Sin terminar');
+  return { rows, visible, meRow, hasDnf };
+});
+assert(resOk.visible && resOk.rows === 4, 'tabla de resultados con 3 pilotos y cabecera (' + resOk.rows + ')');
+assert(resOk.meRow && resOk.hasDnf, 'fila propia resaltada y DNF mostrado');
+
+await page.evaluate(() => window.__tk.showMenu());
+await sleep(1500);
+
+const errFiltered = cdpErrors.filter(e => !/favicon|AudioContext|Deprecat/i.test(e));
+assert(errFiltered.length === 0, 'sin errores de consola' + (errFiltered.length ? ': ' + errFiltered.slice(0, 3).join(' | ') : ''));
 
 await browser.close();
 if (proc) proc.kill();

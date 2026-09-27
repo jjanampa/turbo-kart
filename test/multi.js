@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 
 const PORT = Number(process.env.TK_MULTI_PORT || 4907);
+const BASE = process.env.TK_BASE || 'http://localhost:' + PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let failures = 0;
 
@@ -14,15 +15,18 @@ function assert(cond, msg) {
   }
 }
 
-const proc = spawn(process.execPath, ['server/index.js'], {
-  env: { ...process.env, PORT: String(PORT) },
-  stdio: ['ignore', 'pipe', 'pipe']
-});
-proc.stderr.on('data', d => console.error('[server] ' + d.toString().trim()));
+let proc = null;
+if (!process.env.TK_BASE) {
+  proc = spawn(process.execPath, ['server/index.js'], {
+    env: { ...process.env, PORT: String(PORT) },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  proc.stderr.on('data', d => console.error('[server] ' + d.toString().trim()));
+}
 
 for (let i = 0; i < 60; i++) {
   try {
-    const r = await fetch('http://localhost:' + PORT + '/health');
+    const r = await fetch(BASE + '/health');
     if (r.ok) break;
   } catch {}
   await sleep(150);
@@ -76,16 +80,20 @@ async function pump(page, ms) {
 }
 
 const host = await makePage(900, 620);
-await host.goto('http://localhost:' + PORT + '/', { waitUntil: 'networkidle2' });
+await host.goto(BASE + '/', { waitUntil: 'networkidle2', timeout: 45000 });
 await sleep(2500);
 await click(host, '#btnCreate');
 const gotLobby = await waitFor(async () => host.$eval('#lobby', el => !el.classList.contains('hidden')), 20000);
 assert(gotLobby, 'anfitrion en sala');
+const codeOk = await waitFor(async () => {
+  const c = await host.$eval('#roomCode', el => el.textContent.trim());
+  return /^[A-Z0-9]{4}$/.test(c);
+}, 20000);
 const code = await host.$eval('#roomCode', el => el.textContent.trim());
-assert(/^[A-Z0-9]{4}$/.test(code), 'anfitrion crea sala ' + code);
+assert(codeOk && /^[A-Z0-9]{4}$/.test(code), 'anfitrion crea sala ' + code);
 
 const guest = await makePage(900, 620);
-await guest.goto('http://localhost:' + PORT + '/?room=' + code, { waitUntil: 'networkidle2' });
+await guest.goto(BASE + '/?room=' + code, { waitUntil: 'networkidle2', timeout: 45000 });
 await sleep(2000);
 const prefilled = await guest.$eval('#inpCode', el => el.value);
 assert(prefilled === code, 'enlace de invitacion prellena el codigo');
@@ -157,7 +165,7 @@ await guest.screenshot({ path: 'test/multi-guest.png' });
 assert(errors.length === 0, 'sin errores en ningun cliente' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
 
 await browser.close();
-proc.kill();
+if (proc) proc.kill();
 if (failures) {
   console.error('\n' + failures + ' fallos');
   process.exit(1);
