@@ -7,9 +7,12 @@
     "start": "node server/index.js",
     "dev": "PORT=4321 node server/index.js",
     "check": "node --check server/index.js && node --check shared/constants.js && node --check shared/rng.js && node --check shared/track.js && node --check shared/physics.js && node --check shared/race.js && node --check shared/items.js && node --check shared/hazards.js && node --check shared/bots.js && node --check public/js/main.js && node --check public/js/game.js && node --check public/js/render.js && node --check public/js/kart.js && node --check public/js/hud.js && node --check public/js/ui.js && node --check public/js/input.js && node --check public/js/audio.js && node --check public/js/net.js && node --check public/js/local.js",
-    "sim": "node test/sim.js",
+    "sim": "node --no-warnings --experimental-loader ./test/loader.mjs test/sim.js",
     "wstest": "node test/ws.js",
-    "test": "node test/sim.js && node test/ws.js"
+    "browser": "node test/browser.js",
+    "multi": "node test/multi.js",
+    "live": "node test/live.js",
+    "test": "npm run sim && node test/ws.js"
   },
   "dependencies": {
     "compression": "^1.8.1",

@@ -75,6 +75,13 @@ const app = {
   },
 
   stopRace() {
+    this.disposeScene();
+    if (this.session && this.session.mode === 'net') this.session.close();
+    this.session = null;
+    this.audio.stopEngine();
+  },
+
+  disposeScene() {
     if (this.race) {
       this.race.dispose();
       this.race = null;
@@ -83,9 +90,6 @@ const app = {
       this.world.dispose();
       this.world = null;
     }
-    if (this.session && this.session.mode === 'net') this.session.close();
-    this.session = null;
-    this.audio.stopEngine();
   },
 
   showMenu() {
@@ -180,13 +184,13 @@ const app = {
 
   beginNetRace(m) {
     this.mode = 'net-race';
+    this.disposeScene();
     const track = this.session.track;
     this.world = new World(this.scene, track, { quality: this.quality });
     this.hud.setTrack(track);
     this.race = new Race(this, this.session, {});
     this.ui.hideOverlays();
     this.hud.show(true);
-    this.input.bindTouch(document.getElementById('touch'));
     this.audio.init();
     this.audio.startEngine();
     this.audio.startMusic();
@@ -222,14 +226,7 @@ const app = {
 
   again() {
     if (this.mode === 'net' || this.mode === 'net-race' || (this.session && this.session.mode === 'net')) {
-      if (this.race) {
-        this.race.dispose();
-        this.race = null;
-      }
-      if (this.world) {
-        this.world.dispose();
-        this.world = null;
-      }
+      this.disposeScene();
       this.hud.show(false);
       this.ui.showLobby();
       this.session.sendAgain();
@@ -240,14 +237,7 @@ const app = {
 
   toLobby() {
     if (this.session && this.session.mode === 'net') {
-      if (this.race) {
-        this.race.dispose();
-        this.race = null;
-      }
-      if (this.world) {
-        this.world.dispose();
-        this.world = null;
-      }
+      this.disposeScene();
       this.hud.show(false);
       this.session.sendLobby();
       this.ui.showLobby();
@@ -270,10 +260,8 @@ const app = {
       const input = this.input.get();
       this.race.update(dt, input);
       if (this.mode === 'net-race' || this.mode === 'race') {
-        if (this.input.keys.has('Digit1')) this.quickChat(0);
-        if (this.input.keys.has('Digit2')) this.quickChat(1);
-        if (this.input.keys.has('Digit3')) this.quickChat(2);
-        if (this.input.keys.has('Digit4')) this.quickChat(3);
+        const ci = this.input.consumeChat();
+        if (ci >= 0) this.quickChat(ci);
       }
     }
     if (this.world) this.world.update(dt, this.camera.position);

@@ -162,7 +162,7 @@ export function stepKart(k, inp, world, dt) {
   if (k.spinT > 0) {
     yaw = k.spinDir * 13 * clamp(k.spinT / 0.7, 0.25, 1);
   } else {
-    yaw = steer * PHYS.steerPower * speedFactor * (k.drifting ? PHYS.driftTurn : 1) * (vf < -0.5 ? -1 : 1);
+    yaw = -steer * PHYS.steerPower * speedFactor * (k.drifting ? PHYS.driftTurn : 1) * (vf < -0.5 ? -1 : 1);
     if (vf * vf < 0.05) yaw = 0;
   }
   k.heading += yaw * dt;

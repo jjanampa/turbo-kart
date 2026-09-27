@@ -196,7 +196,7 @@ export function animateKart(kv, st, dt, steerVis = 0) {
   kv.wheelSpin += (st.speed || 0) * dt / 0.38;
   for (const w of kv.wheels) {
     w.pivot.rotation.x = kv.wheelSpin;
-    if (w.front && steerVis) w.pivot.rotation.y = steerVis * 0.42;
+    if (w.front && steerVis) w.pivot.rotation.y = -steerVis * 0.42;
   }
   const boosting = st.boostT > 0 || (st.flags & 2);
   for (const f of kv.flames) {

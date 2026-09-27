@@ -3,7 +3,7 @@ import { makeKartState, resetKart, stepKart } from '/shared/physics.js';
 import { newProgress, updateProgress } from '/shared/race.js';
 import { charById, clamp } from '/shared/constants.js';
 import { buildKart, animateKart } from './kart.js';
-import { buildHazardMesh } from './render.js';
+import { buildHazardMesh, disposeObject } from './render.js';
 
 const V3 = () => new THREE.Vector3();
 
@@ -101,7 +101,6 @@ export class Race {
         this.handleEvents(world.events);
         session.sendState(this.myKart, Date.now());
         this.checkBoxes(dt);
-        this.syncHazardsNet(dt);
       }
       if (!this.demo && this.app.input.consumeItem()) this.tryUseItem();
       if (!this.demo && this.app.input.consumeHorn()) {
@@ -127,7 +126,7 @@ export class Race {
       }
       this.animateOwn(dt, input, false);
       this.syncOthers(dt);
-      this.syncHazardsLocal(dt);
+      this.syncHazards(dt);
       this.updateCamera(dt, input);
       this.updateHud(dt, nowMs);
     } else if (this.state === 'results') {
@@ -135,7 +134,7 @@ export class Race {
       else session.updateOthers(dt);
       this.animateOwn(dt, input, false);
       this.syncOthers(dt);
-      this.syncHazardsLocal(dt);
+      this.syncHazards(dt);
       this.updateDemoCamera(dt);
     }
   }
@@ -309,6 +308,11 @@ export class Race {
     }
   }
 
+  syncHazards(dt) {
+    if (this.session.mode === 'net') this.syncHazardsNet(dt);
+    else this.syncHazardsLocal(dt);
+  }
+
   syncHazardsLocal(dt) {
     const seen = new Set();
     for (const h of this.session.hazards || []) {
@@ -317,17 +321,18 @@ export class Race {
       if (!entry) {
         const built = buildHazardMesh(h.type);
         this.app.scene.add(built.group);
-        entry = { built, hint: -1, t: 0 };
+        entry = { built, hint: -1 };
         this.hazardMeshes.set(h.id, entry);
       }
       entry.built.group.position.set(h.x, h.y !== undefined ? h.y : this.gy(h.x, h.z), h.z);
       entry.built.group.rotation.y = h.heading;
       entry.built.group.rotation.x = h.type === 'banana' ? 0 : 0.12;
-      entry.built.coreSpin = h.type === 'bolt' ? 6 : 0.9;
+      this.spinHazard(entry, h, dt);
     }
     for (const [id, entry] of this.hazardMeshes) {
       if (!seen.has(id)) {
         this.app.scene.remove(entry.built.group);
+        disposeObject(entry.built.group, false);
         this.hazardMeshes.delete(id);
       }
     }
@@ -349,13 +354,21 @@ export class Race {
       entry.built.group.position.set(h.x, pr.y + (h.type === 'banana' ? 0.35 : 0.8), h.z);
       entry.built.group.rotation.y = h.heading;
       entry.built.group.rotation.x = h.type === 'banana' ? 0 : 0.12;
+      this.spinHazard(entry, h, dt);
     }
     for (const [id, entry] of this.hazardMeshes) {
       if (!seen.has(id)) {
         this.app.scene.remove(entry.built.group);
+        disposeObject(entry.built.group, false);
         this.hazardMeshes.delete(id);
       }
     }
+  }
+
+  spinHazard(entry, h, dt) {
+    const core = entry.built.group.children[0];
+    if (!core) return;
+    core.rotation.y += dt * (h.type === 'bolt' ? 9 : h.type === 'seeker' ? 4 : 1.4);
   }
 
   handleEvents(list) {
@@ -589,9 +602,18 @@ export class Race {
   }
 
   dispose() {
-    if (this.myVisual) this.app.scene.remove(this.myVisual.group);
-    for (const entry of this.meshes.values()) this.app.scene.remove(entry.kv.group);
-    for (const entry of this.hazardMeshes.values()) this.app.scene.remove(entry.built.group);
+    if (this.myVisual) {
+      this.app.scene.remove(this.myVisual.group);
+      disposeObject(this.myVisual.group, true);
+    }
+    for (const entry of this.meshes.values()) {
+      this.app.scene.remove(entry.kv.group);
+      disposeObject(entry.kv.group, true);
+    }
+    for (const entry of this.hazardMeshes.values()) {
+      this.app.scene.remove(entry.built.group);
+      disposeObject(entry.built.group, false);
+    }
     this.meshes.clear();
     this.hazardMeshes.clear();
   }

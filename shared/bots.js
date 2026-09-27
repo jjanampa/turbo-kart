@@ -24,7 +24,7 @@ export function botInput(k, world, dt) {
   const p = track.worldAt(sT, offset, 0);
   const desired = Math.atan2(p.x - k.x, p.z - k.z);
   const diff = wrapPI(desired - k.heading);
-  let steer = clamp(diff * (1.7 + k.skill * 0.8), -1, 1);
+  let steer = clamp(-diff * (1.7 + k.skill * 0.8), -1, 1);
   let throttle = 1;
   let brake = 0;
   if (Math.abs(diff) > 1.7 && Math.abs(k.speed) > 16) {

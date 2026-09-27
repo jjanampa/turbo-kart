@@ -1,10 +1,11 @@
 import { buildTrack, TRACKS } from '../shared/track.js';
 import { makeBot, botInput, botItemChoice } from '../shared/bots.js';
-import { resetKart, resolveKartCollisions, stepKart } from '../shared/physics.js';
+import { resetKart, resolveKartCollisions, stepKart, makeKartState } from '../shared/physics.js';
 import { newProgress, updateProgress } from '../shared/race.js';
 import { rollItem, TICK } from '../shared/constants.js';
 import { useItem } from '../shared/items.js';
-import { stepHazards } from '../shared/hazards.js';
+import { stepHazards, makeHazard } from '../shared/hazards.js';
+import { LocalSession } from '../public/js/local.js';
 
 let failures = 0;
 function assert(cond, msg) {
@@ -121,6 +122,122 @@ for (const trackId of ['sunset', 'forest', 'volcano']) {
   assert(r.finished >= 5, trackId + ': terminaron ' + r.finished + '/6 bots en ' + r.secs.toFixed(1) + 's');
   assert(r.maxSpeed > 20, trackId + ': velocidad maxima ' + r.maxSpeed.toFixed(1) + ' m/s');
 }
+
+function steerTest() {
+  const track = buildTrack('sunset');
+  const mk = id => {
+    const k = makeKartState({ id, charId: 'turbo' });
+    resetKart(k, track, 120, 0);
+    return k;
+  };
+  const world = { track, events: [], stepKart: null, useItem: null };
+  world.stepKart = (k, inp, d) => stepKart(k, inp, world, d);
+
+  const right = mk('right');
+  const lx = Math.cos(right.heading);
+  const lz = -Math.sin(right.heading);
+  const x0 = right.x;
+  const z0 = right.z;
+  for (let i = 0; i < 40; i++) world.stepKart(right, { steer: 1, throttle: 1, brake: 0, drift: false }, 1 / 30);
+  const latR = (right.x - x0) * lx + (right.z - z0) * lz;
+  assert(latR < -1, 'tecla derecha gira a la derecha (lateral ' + latR.toFixed(2) + 'm)');
+
+  const left = mk('left');
+  const lx2 = Math.cos(left.heading);
+  const lz2 = -Math.sin(left.heading);
+  const x1 = left.x;
+  const z1 = left.z;
+  for (let i = 0; i < 40; i++) world.stepKart(left, { steer: -1, throttle: 1, brake: 0, drift: false }, 1 / 30);
+  const latL = (left.x - x1) * lx2 + (left.z - z1) * lz2;
+  assert(latL > 1, 'tecla izquierda gira a la izquierda (lateral ' + latL.toFixed(2) + 'm)');
+
+  const dr = mk('drift');
+  const lx3 = Math.cos(dr.heading);
+  const lz3 = -Math.sin(dr.heading);
+  const x2 = dr.x;
+  const z2 = dr.z;
+  for (let i = 0; i < 40; i++) world.stepKart(dr, { steer: 1, throttle: 1, brake: 0, drift: true }, 1 / 30);
+  const latD = (dr.x - x2) * lx3 + (dr.z - z2) * lz3;
+  assert(latD < -1 && dr.driftDir === 1, 'derrape hacia la derecha mantiene la direccion (lateral ' + latD.toFixed(2) + 'm, dir ' + dr.driftDir + ')');
+}
+steerTest();
+
+function hazardTest() {
+  const track = buildTrack('sunset');
+  const shooter = makeKartState({ id: 'me', charId: 'turbo' });
+  resetKart(shooter, track, 100, 0);
+  const target = makeKartState({ id: 'botX', charId: 'bolt' });
+  resetKart(target, track, 115, 0);
+
+  const world = { track, karts: [shooter, target], events: [], now: 0, time: 0 };
+  const out = useItem(world, shooter, 'bolt');
+  const list = [out.hazard];
+  let hit = null;
+  for (let i = 0; i < 120 && !hit; i++) {
+    world.now += 1000 / 30;
+    const evs = stepHazards(list, world, 1 / 30);
+    for (const e of evs) if (e.kind === 'hit') hit = e;
+  }
+  assert(!!hit && hit.victim === 'botX', 'el rayo viaja y golpea al kart de adelante');
+  assert(list.length === 0, 'el rayo se consume al impactar');
+  assert(target.spinT > 0, 'la victima queda girando por el impacto');
+
+  const world2 = { track, karts: [], events: [], now: 0, time: 0 };
+  const banana = makeHazard('banana', 'me', shooter.x, shooter.z, 0, 0, track);
+  const list2 = [banana];
+  for (let i = 0; i < 150; i++) {
+    world2.now += 1000 / 30;
+    stepHazards(list2, world2, 1 / 30);
+  }
+  assert(list2.length === 1, 'el platano permanece en pista 5 segundos');
+
+  const world3 = { track, karts: [shooter], events: [], now: 0, time: 0 };
+  const seeker = useItem(world3, (() => {
+    const s2 = makeKartState({ id: 'me2', charId: 'turbo' });
+    resetKart(s2, track, 100, 0);
+    return s2;
+  })(), 'seeker');
+  assert(!!seeker.hazard && seeker.hazard.speed > 0, 'el misil nace con velocidad');
+  const sawMotion = (() => {
+    const list3 = [seeker.hazard];
+    const x0 = seeker.hazard.x;
+    for (let i = 0; i < 30; i++) {
+      world3.now += 1000 / 30;
+      stepHazards(list3, world3, 1 / 30);
+    }
+    return Math.hypot(seeker.hazard.x - x0, seeker.hazard.z - 0) > 5 || list3.length === 0;
+  })();
+  assert(sawMotion, 'el misil avanza tras 1 segundo');
+}
+hazardTest();
+
+async function localRaceTest() {
+  const session = new LocalSession(null);
+  session.start({ name: 'Test', charId: 'turbo', trackId: 'forest', laps: 1, bots: 3 });
+  let ended = null;
+  let eventCount = 0;
+  let guard = 0;
+  const dt = TICK;
+  while (session.state === 'racing' && guard++ < 30 * 260) {
+    const world = { track: session.track, time: session.time };
+    const inp = session.myProg.finished
+      ? { steer: 0, throttle: 0, brake: 0, drift: false }
+      : botInput(session.myKart, world, dt);
+    const evs = session.tick(dt, inp, false);
+    eventCount += evs.length;
+    for (const e of evs) if (e.kind === 'raceEnd') ended = e.list;
+  }
+  assert(!!ended, 'carrera local termina y emite resultados');
+  if (ended) {
+    assert(ended.length === 4, 'resultados con 4 participantes (' + ended.length + ')');
+    assert(ended[0].place === 1 && ended[3].place === 4, 'puestos ordenados 1..4');
+    assert(ended.filter(r => r.finished).length >= 3, 'al menos 3 terminan (' + ended.filter(r => r.finished).length + ')');
+    const me = ended.find(r => r.id === 'me');
+    assert(me && me.time > 0 && me.place >= 1, 'mi tiempo y puesto registrados (' + (me ? me.place : '?') + ')');
+  }
+  assert(eventCount > 10, 'eventos de carrera emitidos (' + eventCount + ')');
+}
+await localRaceTest();
 
 if (failures) {
   console.error('\n' + failures + ' fallos');

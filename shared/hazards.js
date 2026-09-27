@@ -1,4 +1,4 @@
-import { HAZARD_LIFETIME, PHYS, clamp, wrapPI } from './constants.js';
+import { HAZARD_LIFETIME_MS, PHYS, clamp, wrapPI } from './constants.js';
 import { applySpin } from './physics.js';
 
 export function makeHazard(type, ownerId, x, z, heading, now, track, targetId = null) {
@@ -27,7 +27,7 @@ export function stepHazards(hazards, world, dt) {
   const events = world.events || (world.events = []);
   for (const h of hazards) {
     if (h.dead) continue;
-    if (world.now - h.born > HAZARD_LIFETIME) {
+    if (world.now - h.born > HAZARD_LIFETIME_MS) {
       h.dead = true;
       continue;
     }

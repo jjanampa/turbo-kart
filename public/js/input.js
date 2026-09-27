@@ -7,6 +7,7 @@ export class Input {
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
     this.itemFlag = false;
     this.hornFlag = false;
+    this.chatFlag = -1;
     this.gpSteer = 0;
     this.gpThrottle = 0;
     this.gpBrake = 0;
@@ -17,6 +18,8 @@ export class Input {
       this.keys.add(e.code);
       if (e.code === 'KeyE' || e.code === 'KeyK' || e.code === 'ControlLeft') this.itemFlag = true;
       if (e.code === 'KeyH') this.hornFlag = true;
+      const chat = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 }[e.code];
+      if (chat !== undefined) this.chatFlag = chat;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', e => this.keys.delete(e.code));
@@ -91,6 +94,12 @@ export class Input {
   consumeHorn() {
     const v = this.hornFlag;
     this.hornFlag = false;
+    return v;
+  }
+
+  consumeChat() {
+    const v = this.chatFlag;
+    this.chatFlag = -1;
     return v;
   }
 }

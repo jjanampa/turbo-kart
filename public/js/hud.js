@@ -298,7 +298,7 @@ export class Hud {
   }
 
   setStandings(list) {
-    const key = list.map(e => e.name + (e.me ? '*' : '')).join('|');
+    const key = list.map(e => (e.place || '') + e.name + (e.me ? '*' : '')).join('|');
     if (key === this._standKey) return;
     this._standKey = key;
     this.standings.innerHTML = '';

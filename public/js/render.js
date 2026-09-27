@@ -150,7 +150,7 @@ export function cloudTexture() {
   });
 }
 
-export function glowTexture(color) {
+function makeGlowTexture(color) {
   const c = new THREE.Color(color);
   return canvasTex(256, 256, (ctx, w, h) => {
     const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
@@ -159,6 +159,34 @@ export function glowTexture(color) {
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
+  });
+}
+
+const glowCache = new Map();
+
+export function glowTexture(color) {
+  const key = String(color);
+  if (!glowCache.has(key)) glowCache.set(key, makeGlowTexture(color));
+  return glowCache.get(key);
+}
+
+export function disposeObject(obj, disposeTextures = false) {
+  obj.traverse(o => {
+    if (o.isSprite) {
+      if (o.material) {
+        if (disposeTextures && o.material.map) o.material.map.dispose();
+        o.material.dispose();
+      }
+      return;
+    }
+    if (!o.isMesh && !o.isPoints && !o.isInstancedMesh) return;
+    if (o.geometry) o.geometry.dispose();
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m) continue;
+      if (disposeTextures && m.map) m.map.dispose();
+      m.dispose();
+    }
   });
 }
 
@@ -323,7 +351,8 @@ export class World {
     this.group.add(sky);
     this.disposables.push(geo, mat);
 
-    const glow = this.trackTex(glowTexture(p.sun));
+    const glow = makeGlowTexture(p.sun);
+    this.trackTex(glow);
     const sunMat = new THREE.SpriteMaterial({ map: glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
     const sun = new THREE.Sprite(sunMat);
     sun.position.copy(this.sunDir).multiplyScalar(1250);
@@ -683,20 +712,7 @@ export class World {
 
   dispose() {
     this.scene.remove(this.group);
-    for (const item of this.disposables) {
-      try {
-        if (item.isMesh || item.isInstancedMesh || item.isPoints) {
-          if (item.geometry) item.geometry.dispose();
-        } else if (item.isTexture || (item.dispose && item.isMaterial) || item.isMaterial) {
-          if (item.map) item.map.dispose();
-          item.dispose();
-        } else if (item.isMaterial) {
-          item.dispose();
-        } else if (item.dispose && !item.isObject3D) {
-          item.dispose();
-        }
-      } catch {}
-    }
+    disposeObject(this.group, true);
     this.disposables = [];
   }
 }

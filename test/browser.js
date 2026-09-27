@@ -96,9 +96,30 @@ const accelerated = await (async () => {
   return Number(await page.$eval('#speedNum', el => el.textContent));
 })();
 assert(accelerated > 25, 'el kart acelera y el velocimetro marca (' + accelerated + ' km/h)');
+
+await page.evaluate(() => {
+  window.__h0 = window.__tk.race.myKart.heading;
+  window.__dh = () => {
+    let d = window.__tk.race.myKart.heading - window.__h0;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  };
+});
+await page.keyboard.down('KeyD');
+await sleep(800);
+const dhRight = await page.evaluate(() => window.__dh());
+await page.keyboard.up('KeyD');
+assert(dhRight < -0.02, 'tecla D gira a la derecha (delta ' + dhRight.toFixed(3) + ' rad)');
+await page.keyboard.down('KeyA');
+await sleep(800);
+const dhLeft = await page.evaluate(() => window.__dh());
+await page.keyboard.up('KeyA');
+assert(dhLeft > dhRight, 'tecla A gira a la izquierda (delta ' + dhLeft.toFixed(3) + ' rad)');
+
 await page.keyboard.down('Space');
 await page.keyboard.down('KeyA');
-await sleep(1500);
+await sleep(1200);
 await page.keyboard.up('KeyA');
 await page.keyboard.up('Space');
 await sleep(800);
@@ -126,6 +147,64 @@ const glOk = await page.evaluate(() => {
   return !!gl && !gl.isContextLost();
 });
 assert(glOk, 'contexto WebGL activo');
+
+const banana = await page.evaluate(() => {
+  const app = window.__tk;
+  app.race.onItemGranted('banana');
+  const roulette = app.race.myKart.item;
+  const before = app.session.hazards.length;
+  app.race.myKart.itemT = 0;
+  app.race.myKart.spinT = 0;
+  app.race.myKart.invulnT = 0;
+  app.race.tryUseItem();
+  return { roulette, item: app.race.myKart.item, before, after: app.session.hazards.length };
+});
+assert(banana.roulette === 'banana', 'item recibido en el HUD (' + banana.roulette + ')');
+assert(banana.item === null, 'item consumido al usarlo');
+assert(banana.after > banana.before, 'el uso crea un proyectil en la sesion (' + banana.before + '->' + banana.after + ')');
+await page.evaluate(() => {
+  const app = window.__tk;
+  const k = app.race.myKart;
+  app.session.hazards.push({
+    id: 'test-banana',
+    type: 'banana',
+    ownerId: 'nadie',
+    targetId: null,
+    x: k.x + 45,
+    z: k.z + 45,
+    heading: 0,
+    speed: 0,
+    born: app.session.time * 1000,
+    bounces: 0,
+    dead: false,
+    s: k.s,
+    u: k.u,
+    projIdx: -1,
+    y: k.y + 0.35
+  });
+});
+await sleep(600);
+const bananaMeshes = await page.evaluate(() => window.__tk.race.hazardMeshes.size);
+assert(bananaMeshes > 0, 'el cliente dibuja los proyectiles de la sesion (' + bananaMeshes + ')');
+const bolt = await page.evaluate(() => {
+  const app = window.__tk;
+  app.race.onItemGranted('bolt');
+  app.race.myKart.itemT = 0;
+  app.race.myKart.spinT = 0;
+  app.race.myKart.invulnT = 0;
+  const before = app.session.hazards.length;
+  app.race.tryUseItem();
+  return { before, after: app.session.hazards.length, item: app.race.myKart.item };
+});
+assert(bolt.item === null && bolt.after > bolt.before, 'rayo lanzado (' + bolt.before + '->' + bolt.after + ')');
+await sleep(1500);
+const hazardOk = await page.evaluate(() => {
+  const app = window.__tk;
+  return [...app.race.hazardMeshes.values()].every(
+    h => isFinite(h.built.group.position.x) && isFinite(h.built.group.position.z) && isFinite(h.built.group.position.y)
+  );
+});
+assert(hazardOk, 'proyectiles con posiciones validas tras 1.5s');
 
 const errFiltered = cdpErrors.filter(e => !/favicon|AudioContext|Deprecat/i.test(e));
 assert(errFiltered.length === 0, 'sin errores de consola' + (errFiltered.length ? ': ' + errFiltered.slice(0, 3).join(' | ') : ''));
